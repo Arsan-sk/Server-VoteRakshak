@@ -15,10 +15,19 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import votingRoutes from './routes/voting.js';
 import officerRoutes from './routes/officer.js';
+import debugRoutes from './routes/debug.js';
 
 // Load environment variables
 dotenv.config();
 
+// ===== Warn about missing critical environment variables =====
+if (!process.env.JWT_SECRET) {
+    console.warn('⚠️  Environment variable JWT_SECRET is not set. Authentication token signing will fail.');
+}
+
+if (!process.env.AADHAAR_SALT) {
+    console.warn('⚠️  Environment variable AADHAAR_SALT is not set. Using default salt may cause inconsistent Aadhaar hashing across deployments.');
+}
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -110,12 +119,31 @@ app.use('/api/auth', authRoutes);
 app.use('/api/voting', votingRoutes);
 app.use('/api/officer', officerRoutes);
 
+// Mount debug routes only if explicitly enabled via env var
+if (process.env.ENABLE_DEBUG === 'true') {
+    console.warn('⚠️  Debug routes enabled (ENABLE_DEBUG=true)');
+    app.use('/api/debug', debugRoutes);
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         activeBooths: Array.from(activeBooths.keys()),
+    });
+});
+
+// Root info endpoint (friendly message for browser / external checks)
+app.get('/', (req, res) => {
+    res.json({
+        message: 'VoteRakshak Backend - API available under /api',
+        health: '/api/health',
+        routes: [
+            '/api/auth',
+            '/api/voting',
+            '/api/officer',
+        ],
     });
 });
 

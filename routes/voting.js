@@ -89,7 +89,12 @@ router.post('/cast', async (req, res) => {
         // Find user
         const users = readUsers();
         const aadharHash = hashAadhaar(aadhar);
-        const userIndex = users.findIndex(u => u.aadharHash === aadharHash);
+
+        // Try to find by hashed Aadhaar first, then fall back to raw Aadhaar (test/dev only)
+        let userIndex = users.findIndex(u => u.aadharHash === aadharHash);
+        if (userIndex === -1) {
+            userIndex = users.findIndex(u => u.rawAadhaar === aadhar);
+        }
 
         if (userIndex === -1) {
             return res.status(404).json({
