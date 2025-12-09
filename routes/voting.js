@@ -220,8 +220,14 @@ router.get('/voter/:aadhar', async (req, res) => {
         const aadharHash = hashAadhaar(aadhar);
         let user = users.find(u => u.aadharHash === aadharHash);
 
-        // Check blockchain for voting status
-        const votedOnChain = await hasVoted(aadharHash);
+        // Check blockchain for voting status (Fail-safe)
+        let votedOnChain = false;
+        try {
+            votedOnChain = await hasVoted(aadharHash);
+        } catch (chainErr) {
+            console.warn('⚠️ Blockchain check failed (likely not connected). Treating as not voted on chain.', chainErr.message);
+            // Non-blocking: proceed with database data only
+        }
 
         // Try to get user from Supabase first
         try {
