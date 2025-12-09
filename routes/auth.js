@@ -185,6 +185,11 @@ router.post('/register', async (req, res) => {
  * POST /api/auth/login
  * Login for voters and officers
  */
+
+/**
+ * POST /api/auth/login
+ * Login for voters and officers
+ */
 router.post('/login', async (req, res) => {
     try {
         const { username, password, role } = req.body;
@@ -236,9 +241,46 @@ router.post('/login', async (req, res) => {
                 });
             }
 
+            // 1. Try Supabase first (Primary Source of Truth)
+            let user = null;
+            try {
+                const aadharHash = hashAadhaar(aadhar);
+                user = await supabaseClient.getUserByAadharHash(aadharHash);
+
+                // Fallback (DEV ONLY): Check raw aadhaar if hash lookup fails
+                if (!user && process.env.NODE_ENV === 'development') {
+                    user = await supabaseClient.getUserByRawAadhaar(aadhar);
+                }
+
+                if (user) {
+                    // Normalize Supabase user object to frontend expectation
+                    const token = generateToken({
+                        userId: user.id,
+                        aadharHash: user.aadhar_hash,
+                        role: 'voter',
+                    });
+
+                    console.log(`✅ Voter logged in (Supabase): ${user.id}`);
+
+                    return res.json({
+                        success: true,
+                        message: 'Login successful',
+                        token,
+                        user: {
+                            id: user.id,
+                            name: `${user.name_first} ${user.name_last}`,
+                            hasVoted: user.has_voted,
+                        },
+                    });
+                }
+            } catch (err) {
+                console.error('⚠️ Supabase login check failed, falling back to local:', err.message);
+            }
+
+            // 2. Fallback to Local JSON (Secondary/Legacy)
             const users = readUsers();
             const aadharHash = hashAadhaar(aadhar);
-            const user = users.find(u => u.aadharHash === aadharHash);
+            user = users.find(u => u.aadharHash === aadharHash);
 
             if (!user) {
                 return res.status(404).json({
@@ -252,7 +294,7 @@ router.post('/login', async (req, res) => {
                 role: 'voter',
             });
 
-            console.log(`✅ Voter logged in: ${user.id}`);
+            console.log(`✅ Voter logged in (Local): ${user.id}`);
 
             return res.json({
                 success: true,
