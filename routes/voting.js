@@ -87,22 +87,33 @@ router.post('/cast', async (req, res) => {
         }
 
         // Find user
-        const users = readUsers();
         const aadharHash = hashAadhaar(aadhar);
 
-        // Try to find by hashed Aadhaar first, then fall back to raw Aadhaar (test/dev only)
-        let userIndex = users.findIndex(u => u.aadharHash === aadharHash);
-        if (userIndex === -1) {
-            userIndex = users.findIndex(u => u.rawAadhaar === aadhar);
+        // Try Supabase first, then fall back to local JSON
+        let user = null;
+        try {
+            user = await (await import('../utils/supabaseClient.js')).getUserByAadharHash(aadharHash);
+            if (!user) {
+                user = await (await import('../utils/supabaseClient.js')).getUserByRawAadhaar(aadhar);
+            }
+        } catch (err) {
+            console.error('❌ Supabase lookup failed, falling back to local JSON:', err.message);
         }
 
-        if (userIndex === -1) {
-            return res.status(404).json({
-                error: 'Voter not found',
-            });
-        }
+        if (!user) {
+            const users = readUsers();
+            // Try to find by hashed Aadhaar first, then fall back to raw Aadhaar (test/dev only)
+            let userIndex = users.findIndex(u => u.aadharHash === aadharHash);
+            if (userIndex === -1) {
+                userIndex = users.findIndex(u => u.rawAadhaar === aadhar);
+            }
 
-        const user = users[userIndex];
+            if (userIndex === -1) {
+                return res.status(404).json({ error: 'Voter not found' });
+            }
+
+            user = users[userIndex];
+        }
 
         // Check if already voted (blockchain check)
         const alreadyVoted = await hasVoted(aadharHash);

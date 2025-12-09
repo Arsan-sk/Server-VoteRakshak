@@ -30,13 +30,33 @@ function writeLogs(logs) {
 }
 
 function addLog(logEntry) {
-    const logs = readLogs();
-    logs.push({
-        ...logEntry,
-        timestamp: new Date().toISOString(),
-        id: `LOG_${Date.now()}`,
-    });
-    writeLogs(logs);
+    // Try adding log to Supabase, fallback to local file
+    (async () => {
+        try {
+            const logObj = {
+                id: `LOG_${Date.now()}`,
+                action: logEntry.action,
+                booth_id: logEntry.boothId || null,
+                voter_aadhar: logEntry.voterAadhar || null,
+                officer_id: logEntry.officerId || null,
+                status: logEntry.status || null,
+                details: { error: logEntry.error || null },
+                timestamp: new Date().toISOString(),
+            };
+            await (await import('../utils/supabaseClient.js')).addLog(logObj);
+            return;
+        } catch (err) {
+            console.error('❌ Supabase addLog failed, falling back to local file:', err.message);
+        }
+
+        const logs = readLogs();
+        logs.push({
+            ...logEntry,
+            timestamp: new Date().toISOString(),
+            id: `LOG_${Date.now()}`,
+        });
+        writeLogs(logs);
+    })();
 }
 
 // =================== Routes ===================
